@@ -56,8 +56,8 @@ export default function ResultsGallery({ data }: ResultsGalleryProps) {
 
       {shots.length > 0 && (
         <section className="space-y-3">
-          <h3 className="text-lg font-medium">Enhanced Shots</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <h3 className="text-lg font-medium">Enhanced Product Shots</h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {shots.map((shot, index) => {
               const label = ENHANCED_SHOT_LABELS[index] ?? `Shot ${index + 1}`;
               return (

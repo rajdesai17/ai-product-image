@@ -54,6 +54,12 @@ async def process_video(request: ProcessVideoRequest) -> ProcessVideoResponse:
     )
 
     transformed_state = convert_paths_to_urls(state, settings.static_dir)
+    
+    # Log the response for debugging
+    logger.info(f"Workflow completed. Product: {transformed_state.get('product_name')}")
+    logger.info(f"Key frame URL: {transformed_state.get('key_frame_url')}")
+    logger.info(f"Segmented URL: {transformed_state.get('segmented_image_url')}")
+    logger.info(f"Enhanced shots: {transformed_state.get('enhanced_shots')}")
 
     return ProcessVideoResponse(
       status="success",
