@@ -37,6 +37,32 @@ Create product-only images and enhanced shots from a YouTube URL.
   - Files are written under `backend/static/{job_id}` and served at `/static`.
   - React renders returned URLs in the gallery.
 
+### 2.1) Image Storage & Delivery
+**How segmented images and frames are stored and passed:**
+- **Storage**: All images (frames, segmented, enhanced) are stored on the backend filesystem at `backend/static/{job_id}/`:
+  ```
+  backend/static/
+    └── {job_id}/
+        ├── frames/
+        │   ├── frame_000.jpg
+        │   └── ...
+        ├── segmented.png
+        └── enhanced/
+            ├── enhanced_studio.png
+            └── ...
+  ```
+- **Backend Processing**: 
+  - Workflow nodes save images directly to disk (e.g., `segmented.png` saved to `backend/static/{job_id}/segmented.png`)
+  - File paths are converted to URLs using `to_static_url()` (e.g., `/static/{job_id}/segmented.png`)
+  - FastAPI serves static files via `StaticFiles` mounted at `/static` route
+- **Frontend Delivery**:
+  - Backend returns JSON response with URLs (not binary data)
+  - Frontend receives URLs like `/static/{job_id}/segmented.png`
+  - Frontend fetches images via HTTP requests to `{API_BASE_URL}/static/{job_id}/...`
+  - Images are displayed using `<img src={resolveStaticUrl(segmented_image_url)} />`
+
+**Note**: Images are NOT passed as binary data in the JSON response. They're stored on disk and accessed via HTTP URLs.
+
 ### 3) Technologies used
 - Backend: FastAPI, LangGraph, Uvicorn
 - Video/Frames: yt-dlp, OpenCV
