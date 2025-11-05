@@ -2,6 +2,10 @@
 
 Create product-only images and enhanced shots from a YouTube URL.
 
+## workflow
+<img width="1841" height="770" alt="image" src="https://github.com/user-attachments/assets/f3fda8dc-b112-4ab0-ad3d-1f157c92fa42" />
+
+
 ### 1) Approach (step-by-step)
 - [ ] Input: User enters a YouTube URL (Shorts are auto-normalized to `watch?v=`).
 - [ ] Frame Extraction: Download video via yt-dlp, sample frames with OpenCV.
