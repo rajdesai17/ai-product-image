@@ -7,14 +7,14 @@ Create product-only images and enhanced shots from a YouTube URL.
 
 
 ### 1) Approach (step-by-step)
-- [ ] Input: User enters a YouTube URL (Shorts are auto-normalized to `watch?v=`).
-- [ ] Frame Extraction: Download video via yt-dlp, sample frames with OpenCV.
-- [ ] Top Frames: Gemini (vision) selects the top 3 frames.
-- [ ] Product Name: Gemini identifies the product from those frames.
-- [ ] Best Frame: Gemini selects the single best frame index.
-- [ ] Segmentation: Gemini removes background from the best frame (Gemini-only; retries on quota).
-- [ ] Enhancement: Gemini generates 2–3 styled shots (studio, lifestyle, creative), skipping styles if quota is hit.
-- [ ] Output: Backend saves files to `/static/{job_id}/...` and returns URLs in JSON.
+- ✅ **Input:** User enters a YouTube URL (Shorts are auto-normalized to `watch?v=`).
+- ✅ **Frame Extraction:** Download video via yt-dlp, sample frames with OpenCV.
+- ✅ **Top Frames:** Gemini (vision) selects the top 3 frames.
+- ✅ **Product Name:** Gemini identifies the product from those frames.
+- ✅ **Best Frame:** Gemini selects the single best frame index.
+- [ ] **Segmentation:** Gemini removes background from the best frame (Gemini-only; retries on quota).
+- [ ] **Enhancement:** Gemini generates 2–3 styled shots (studio, lifestyle, creative), skipping styles if quota is hit.
+- [ ] **Output:** Backend saves files to `/static/{job_id}/...` and returns URLs in JSON.
 
 ### 2) LangGraph ↔ React communication (API & data flow)
 - Endpoint: `POST /api/process-video`
