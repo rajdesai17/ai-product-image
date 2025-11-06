@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import List, TypedDict
 
@@ -196,7 +197,7 @@ def _make_segmentation_node(gemini: GeminiService, job_paths: JobPaths):
 
 
 def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
-  """Generate 2 enhanced product shots using different styles."""
+  """Generate 2 enhanced product shots (with fallbacks if Gemini fails)."""
   def node(state: WorkflowState) -> dict:
     import logging
     logger = logging.getLogger(__name__)
@@ -207,11 +208,13 @@ def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
     product_name = state.get("product_name", "product")
     logger.info(f"Enhancing product '{product_name}' from segmented image: {segmented_path}")
 
-    # Generate 2 enhanced images (studio and lifestyle - the best shots)
+    # Generate enhanced images prioritizing studio & lifestyle, with creative as backup
     enhanced_paths: list[str] = []
-    styles: tuple[PromptStyle, ...] = ("studio", "lifestyle")
+    styles: tuple[PromptStyle, ...] = ("studio", "lifestyle", "creative")
     
     for style in styles:
+      if len(enhanced_paths) >= 2:
+        break
       try:
         logger.info(f"Generating {style} enhanced shot...")
         prompt = build_prompt(style, product_name)
@@ -242,8 +245,21 @@ def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
         logger.warning(f"Failed to generate {style} shot, skipping: {e}")
         continue
 
+    if len(enhanced_paths) < 2:
+      logger.warning(
+        "Only generated %s enhanced shots from Gemini. Creating fallback copies to reach 2.",
+        len(enhanced_paths),
+      )
+      while len(enhanced_paths) < 2:
+        source_path = Path(enhanced_paths[0]) if enhanced_paths else segmented_path
+        fallback_suffix = f"fallback_{len(enhanced_paths) + 1}"
+        fallback_path = job_paths.enhancement_path(fallback_suffix)
+        shutil.copy(source_path, fallback_path)
+        enhanced_paths.append(str(fallback_path))
+        logger.info(f"Fallback enhanced shot created at: {fallback_path}")
+
     logger.info(f"Enhancement complete. Generated {len(enhanced_paths)} shots: {enhanced_paths}")
-    # Return enhanced shots (should have 2: studio and lifestyle)
+    # Return enhanced shots (always at least 2 paths)
     return {"enhanced_shots": enhanced_paths}
 
   return node
