@@ -24,7 +24,7 @@ This document contains comprehensive Mermaid diagrams illustrating how the AI Pr
 3. **Google Gemini API** (`google-genai>=0.2.0`)
    - Model: `gemini-2.5-flash`
    - **Vision API**: Product identification and best frame selection
-   - **Image Generation API**: Creating enhanced marketing shots (3 styles)
+   - **Image Generation API**: Creates two enhanced shots (studio, lifestyle) with creative as backup
    - Used in `backend/app/services/gemini.py`
 
 4. **rembg** (`rembg>=2.0.55`)
@@ -126,11 +126,11 @@ sequenceDiagram
     OpenCV-->>Backend: 15 frames extracted
     
     Note over Backend: Node 2: Identify Product
-    Backend->>Gemini: Send 10 frames + prompt
+    Backend->>Gemini: Send top 3 frames + prompt
     Gemini-->>Backend: Product Name
     
     Note over Backend: Node 3: Select Best Frame
-    Backend->>Gemini: Send all frames + product name
+    Backend->>Gemini: Send top 3 frames + product name
     Gemini-->>Backend: Frame Index
     
     Note over Backend: Node 4: Segment Image
@@ -178,9 +178,10 @@ stateDiagram-v2
     
     SelectBestFrame: Node 3: Select Best Frame
     note right of SelectBestFrame
-        Tool: Gemini Vision API
-        - Send all frames + product_name
+        Tool: Gemini Vision API (with retries)
+        - Send top 3 frames + product_name
         - Prompt: Select best frame index
+        - Fallback: use first frame if Gemini fails or index is invalid
         Output: best_frame_path
     end note
     
@@ -188,8 +189,9 @@ stateDiagram-v2
     
     SegmentImage: Node 4: Segment Image
     note right of SegmentImage
-        Tool: rembg
-        - Remove background
+        Tool: Gemini Image Edit + rembg fallback
+        - Try Gemini background removal once
+        - Fallback to rembg on error/quota
         - Save PNG with transparency
         Output: segmented_image_path
     end note
@@ -198,9 +200,9 @@ stateDiagram-v2
     
     EnhanceImages: Node 5: Enhance Images
     note right of EnhanceImages
-        Tool: Gemini Image Gen API
-        - Generate 3 enhanced shots
-        - Styles: Studio, Lifestyle, Creative
+        Tool: Gemini Image Gen API + fallback copies
+        - Ensure at least 2 enhanced shots
+        - Prioritize Studio & Lifestyle; Creative as backup
         Output: enhanced_shots[]
     end note
     
@@ -235,10 +237,10 @@ In LangGraph, a **node** is a processing step in the workflow. Each node:
 
 Our workflow has **5 nodes**:
 1. **extract_frames** - Downloads video and extracts frames
-2. **identify_product** - Identifies the product using AI
-3. **select_best_frame** - Selects the best frame using AI
-4. **segment_image** - Removes background
-5. **enhance_images** - Generates 3 enhanced marketing shots
+2. **identify_product** - Identifies the product from the top 3 frames
+3. **select_best_frame** - Uses Gemini with retries; falls back to the first frame on failure
+4. **segment_image** - Tries Gemini once; falls back to rembg to ensure a transparent PNG
+5. **enhance_images** - Produces at least 2 enhanced shots (Studio, Lifestyle; Creative as backup/fallback copies)
 
 ---
 
