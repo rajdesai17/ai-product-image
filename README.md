@@ -2,6 +2,17 @@
 
 Create product-only images and enhanced shots from a YouTube URL.
 
+## TLDR
+
+**What it does:** Extracts product images from YouTube videos, removes backgrounds, and generates 2 enhanced marketing shots.
+
+**How it works:**
+- Downloads video → extracts frames → Gemini identifies product → selects best frame
+- **Background removal:** Tries Gemini once, **falls back to rembg** to guarantee transparent PNG
+- **Enhancement:** Gemini generates 2 shots (studio + lifestyle); uses fallback copies if needed
+
+**Setup:** Clone repo, set `GEMINI_API_KEY` in `backend/.env` (Gemini implemented; test with your own API key). Returns 2 background-removed enhanced shots.
+
 ## workflow
 <img width="1841" height="770" alt="image" src="https://github.com/user-attachments/assets/f3fda8dc-b112-4ab0-ad3d-1f157c92fa42" />
 
