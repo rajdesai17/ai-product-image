@@ -11,9 +11,9 @@ Create product-only images and enhanced shots from a YouTube URL.
 - ✅ **Frame Extraction:** Download video via yt-dlp, sample frames with OpenCV.
 - ✅ **Top Frames:** Gemini (vision) selects the top 3 frames.
 - ✅ **Product Name:** Gemini identifies the product from those frames.
-- ✅ **Best Frame:** Gemini selects the single best frame index.
-- ✅ **Segmentation:** Gemini removes background from the best frame (Gemini-only; retries on quota).
-- ✅ **Enhancement:** Gemini generates 2–3 styled shots (studio, lifestyle, creative), skipping styles if quota is hit.
+- ✅ **Best Frame:** Gemini selects the single best frame index with up to 3 retries; if Gemini fails, the workflow falls back to the first frame.
+- ✅ **Segmentation:** Gemini tries background removal once and immediately falls back to `rembg` so a transparent PNG is always produced.
+- ✅ **Enhancement:** Gemini attempts studio/lifestyle/creative prompts until two shots are generated; if Gemini can’t finish, the pipeline duplicates successful shots so the frontend always receives two images.
 - ✅ **Output:** Backend saves files to `/static/{job_id}/...` and returns URLs in JSON.
 
 ### 2) LangGraph ↔ React communication (API & data flow)
@@ -175,3 +175,20 @@ Demo (PowerShell)
 $body = @{ video_url = "https://youtube.com/shorts/-2DvWn6wUFc" } | ConvertTo-Json
 Invoke-RestMethod -Uri "http://localhost:8000/api/process-video" -Method POST -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 5
 ```
+
+### 5) Time spent
+- **Total:** ~7 hours
+- **Frontend (Next.js UI + gallery):** ~1 hour
+- **Gemini integration (vision + image APIs):** ~2 hours
+- **LangGraph workflow orchestration:** ~2 hours
+- **Background removal (`rembg` fallback) work:** ~1 hour
+- **End-to-end integration & testing:** ~2 hours
+
+### 6) Challenges & improvements
+- **Challenges:**
+  - Gemini image generation quota was exhausted during segmentation; implemented an automatic `rembg` fallback to keep background removal reliable.
+  - Intermittent Gemini network drops during best-frame calls; added retry/backoff and a deterministic fallback frame so the workflow never fails.
+- **Possible improvements:**
+  - Re-run enhancement against fully credited Gemini image models to unlock more styles per request and increase output count (e.g., 5–6 variants).
+  - Refine enhancement prompts based on real results to better control lighting and styling.
+  - Add UI controls so users can request additional edited product-showcase shots or provide custom prompt guidance.
