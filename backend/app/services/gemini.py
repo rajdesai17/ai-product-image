@@ -183,7 +183,7 @@ class GeminiService:
     except (ValueError, IndexError) as error:
       raise GeminiServiceError(f"Unable to parse frame indices from Gemini response: {text}") from error
 
-  def select_best_frame(self, frames: Sequence[Path], product_name: str) -> int:
+  def select_best_frame(self, frames: Sequence[Path], product_name: str, max_retries: int = 3) -> int:
     """Select the single best frame from a set of frames given the product name."""
     if not frames:
       raise GeminiServiceError("No frames provided for best frame selection")
@@ -196,13 +196,59 @@ class GeminiService:
 
     contents = types.Content(parts=list(self._iter_image_parts(frames)) + [types.Part(text=prompt)])
 
-    try:
-      response = self.client.models.generate_content(
-        model=self.text_vision_model,
-        contents=contents,
-      )
-    except Exception as error:
-      raise GeminiServiceError("Gemini best frame selection failed") from error
+    response = None
+    last_error: Exception | None = None
+
+    for attempt in range(max_retries):
+      try:
+        logger.info(
+          "Calling Gemini for best frame selection with model: %s (attempt %s/%s)",
+          self.text_vision_model,
+          attempt + 1,
+          max_retries,
+        )
+        response = self.client.models.generate_content(
+          model=self.text_vision_model,
+          contents=contents,
+        )
+        logger.info("Gemini best frame response received")
+        break
+      except Exception as error:
+        last_error = error
+        is_quota, retry_after = _is_quota_error(error)
+
+        if attempt < max_retries - 1:
+          delay = retry_after if is_quota and retry_after else 5.0 * (attempt + 1)
+          logger.warning(
+            "Gemini best frame selection attempt %s/%s failed: %s. Retrying in %.1fs...",
+            attempt + 1,
+            max_retries,
+            error,
+            delay,
+          )
+          time.sleep(delay)
+          continue
+
+        logger.error("Gemini best frame selection failed after %s attempts: %s", max_retries, error)
+        is_quota_final, retry_after_final = _is_quota_error(error)
+        raise GeminiServiceError(
+          "Gemini best frame selection failed",
+          original_error=error,
+          is_quota_error=is_quota_final,
+          retry_after=retry_after_final,
+        ) from error
+
+    if response is None and last_error:
+      is_quota_final, retry_after_final = _is_quota_error(last_error)
+      raise GeminiServiceError(
+        f"Gemini best frame selection failed: {last_error}",
+        original_error=last_error,
+        is_quota_error=is_quota_final,
+        retry_after=retry_after_final,
+      ) from last_error
+
+    if not response:
+      raise GeminiServiceError("Gemini returned empty response for best frame selection")
 
     text = (response.text or "").strip()
     try:
@@ -210,8 +256,14 @@ class GeminiService:
     except ValueError as error:
       raise GeminiServiceError(f"Unable to parse frame index from Gemini response: {text}") from error
 
-  def segment_product(self, source_image: Path, product_name: str) -> bytes:
-    """Use Gemini to segment/crop the product from the image (remove background)."""
+  def segment_product(self, source_image: Path, product_name: str, max_retries: int = 1) -> bytes:
+    """Use Gemini to segment/crop the product from the image (remove background).
+    
+    Args:
+      source_image: Path to the source image
+      product_name: Name of the product for the prompt
+      max_retries: Maximum number of retry attempts (default: 1 for quick fallback)
+    """
     if not source_image.exists():
       raise GeminiServiceError("Source image not found for segmentation")
 
@@ -237,12 +289,12 @@ class GeminiService:
       types.Part(text=prompt),
     ]
 
-    # Retry up to 2 times on quota errors
+    # Try only once (or max_retries times) - no retries for quick fallback to rembg
     response = None
     last_error = None
-    for attempt in range(3):
+    for attempt in range(max_retries):
       try:
-        logger.info(f"Calling Gemini for segmentation with model: {self.image_model} (attempt {attempt + 1})")
+        logger.info(f"Calling Gemini for segmentation with model: {self.image_model} (attempt {attempt + 1}/{max_retries})")
         response = self.client.models.generate_content(
           model=self.image_model,
           contents=types.Content(parts=parts),
@@ -251,16 +303,14 @@ class GeminiService:
         break  # Success, exit retry loop
       except Exception as error:
         last_error = error
-        is_quota, retry_after = _is_quota_error(error)
-        
-        if is_quota and attempt < 2:
-          delay = retry_after if retry_after else 20.0 * (attempt + 1)
-          logger.warning(f"Gemini quota error on attempt {attempt + 1}/3, retrying after {delay:.1f}s: {error}")
-          time.sleep(delay)
+        # For segmentation, we want to fail fast and fallback to rembg
+        # So we don't retry even on quota errors
+        logger.warning(f"Gemini segmentation failed on attempt {attempt + 1}/{max_retries}: {error}")
+        if attempt < max_retries - 1:
+          # Only retry if max_retries > 1 and we haven't reached the limit
           continue
         else:
-          # Not a quota error or max retries reached
-          logger.error(f"Gemini segmentation API call failed: {error}", exc_info=True)
+          # Final attempt failed - raise error immediately for rembg fallback
           is_quota_final, retry_after_final = _is_quota_error(error)
           error_msg = f"Gemini segmentation failed: {error}"
           raise GeminiServiceError(
@@ -273,7 +323,7 @@ class GeminiService:
     if response is None and last_error:
       is_quota_final, retry_after_final = _is_quota_error(last_error)
       raise GeminiServiceError(
-        f"Gemini segmentation failed after retries: {last_error}",
+        f"Gemini segmentation failed: {last_error}",
         original_error=last_error,
         is_quota_error=is_quota_final,
         retry_after=retry_after_final

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import tempfile
+import time
 from pathlib import Path
 from typing import List
 
 import cv2  # type: ignore
 from yt_dlp import YoutubeDL
+
+logger = logging.getLogger(__name__)
 
 
 class VideoProcessingError(Exception):
@@ -51,7 +55,17 @@ def download_and_sample_frames(
     )
 
 
-def _download_video(video_url: str, output_dir: Path) -> tuple[Path, int | None]:
+def _download_video(video_url: str, output_dir: Path, max_retries: int = 3) -> tuple[Path, int | None]:
+  """Download video with retry logic and increased timeouts.
+  
+  Args:
+    video_url: YouTube URL to download
+    output_dir: Directory to save the video
+    max_retries: Maximum number of retry attempts (default: 3)
+    
+  Returns:
+    Tuple of (video_path, duration)
+  """
   # Normalize YouTube Shorts URLs to regular watch format
   normalized_url = video_url
   if "/shorts/" in video_url:
@@ -64,21 +78,54 @@ def _download_video(video_url: str, output_dir: Path) -> tuple[Path, int | None]
     "quiet": True,
     "no_warnings": True,
     "extract_flat": False,
+    # Increase timeouts to handle slow connections
+    "socket_timeout": 120,  # 2 minutes for socket operations
+    "retries": 10,  # yt-dlp internal retries
+    "fragment_retries": 10,  # Retries for video fragments
+    "file_access_retries": 3,  # Retries for file access
+    # Additional options for better reliability
+    "http_chunk_size": 10485760,  # 10MB chunks for better performance
+    "noprogress": True,
   }
 
-  try:
-    with YoutubeDL(ydl_opts) as ydl:
-      info = ydl.extract_info(normalized_url, download=True)
-      file_path = Path(ydl.prepare_filename(info))
-      duration = info.get("duration")
-  except Exception as error:
-    error_msg = str(error) if error else "Unknown error"
-    raise VideoProcessingError(f"Unable to download video: {error_msg}") from error
+  last_error = None
+  for attempt in range(max_retries):
+    try:
+      logger.info(f"Attempting to download video (attempt {attempt + 1}/{max_retries}): {normalized_url}")
+      with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(normalized_url, download=True)
+        file_path = Path(ydl.prepare_filename(info))
+        duration = info.get("duration")
+      
+      if not file_path.exists():
+        raise VideoProcessingError("Downloaded video file not found")
+      
+      logger.info(f"Video downloaded successfully: {file_path}")
+      return file_path, duration
+      
+    except Exception as error:
+      last_error = error
+      error_msg = str(error) if error else "Unknown error"
+      
+      if attempt < max_retries - 1:
+        # Exponential backoff: wait longer on each retry
+        wait_time = (attempt + 1) * 5  # 5s, 10s, 15s
+        logger.warning(
+          f"Download attempt {attempt + 1} failed: {error_msg}. "
+          f"Retrying in {wait_time} seconds..."
+        )
+        time.sleep(wait_time)
+        # Increase timeout on retry for slow connections
+        ydl_opts["socket_timeout"] = min(ydl_opts["socket_timeout"] + 30, 300)  # Cap at 5 minutes
+      else:
+        # Last attempt failed
+        logger.error(f"All {max_retries} download attempts failed. Last error: {error_msg}")
+        raise VideoProcessingError(f"Unable to download video after {max_retries} attempts: {error_msg}") from error
 
-  if not file_path.exists():
-    raise VideoProcessingError("Downloaded video file not found")
-
-  return file_path, duration
+  # Should never reach here, but just in case
+  if last_error:
+    raise VideoProcessingError(f"Unable to download video: {last_error}") from last_error
+  raise VideoProcessingError("Unable to download video: Unknown error")
 
 
 def _sample_frames(

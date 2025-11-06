@@ -25,3 +25,6 @@ settings = Settings()
 def ensure_directories() -> None:
   settings.static_dir.mkdir(parents=True, exist_ok=True)
 
+
+
+

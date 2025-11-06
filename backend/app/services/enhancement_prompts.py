@@ -27,3 +27,6 @@ def build_prompt(style: PromptStyle, product_name: str) -> str:
     "Preserve the product's proportions and core design."
   )
 
+
+
+

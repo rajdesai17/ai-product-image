@@ -39,3 +39,6 @@ def to_static_url(static_dir: Path, file_path: Path) -> str:
   relative = file_path.resolve().relative_to(static_dir.resolve())
   return f"/static/{relative.as_posix()}"
 
+
+
+

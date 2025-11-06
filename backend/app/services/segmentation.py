@@ -26,3 +26,6 @@ def segment_product(source_image: Path, destination_image: Path) -> Path:
 
   return destination_image
 
+
+
+

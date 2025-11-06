@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import List, TypedDict
 
@@ -8,6 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from .config import Settings
 from .services.enhancement_prompts import PromptStyle, build_prompt
 from .services.gemini import GeminiService, GeminiServiceError
+from .services.segmentation import segment_product as rembg_segment_product, SegmentationError
 from .services.video import download_and_sample_frames
 from .utils.file_paths import JobPaths, ensure_job_paths, to_static_url
 
@@ -120,10 +122,24 @@ def _make_best_frame_node(gemini: GeminiService, job_paths: JobPaths):
       raise ValueError("No top frames available for best frame selection")
     
     # Select best frame from the top 3 frames
-    index = gemini.select_best_frame(top_frames, state["product_name"])
+    try:
+      index = gemini.select_best_frame(top_frames, state["product_name"], max_retries=3)
+    except GeminiServiceError as error:
+      logger = logging.getLogger(__name__)
+      logger.warning(
+        "Gemini best frame selection failed (%s). Falling back to first frame.",
+        error,
+      )
+      index = 0
 
     if index < 0 or index >= len(top_frames):
-      raise ValueError(f"Gemini selected frame index {index} out of range (0-{len(top_frames)-1})")
+      logger = logging.getLogger(__name__)
+      logger.warning(
+        "Gemini selected frame index %s out of range (0-%s). Falling back to first frame.",
+        index,
+        len(top_frames) - 1,
+      )
+      index = 0
 
     return {"best_frame_path": str(top_frames[index])}
 
@@ -131,7 +147,7 @@ def _make_best_frame_node(gemini: GeminiService, job_paths: JobPaths):
 
 
 def _make_segmentation_node(gemini: GeminiService, job_paths: JobPaths):
-  """Use Gemini to segment/crop the product from the best frame."""
+  """Use Gemini to segment/crop the product from the best frame, with rembg fallback."""
   def node(state: WorkflowState) -> dict:
     import logging
     logger = logging.getLogger(__name__)
@@ -143,23 +159,44 @@ def _make_segmentation_node(gemini: GeminiService, job_paths: JobPaths):
     product_name = state.get("product_name", "product")
     logger.info(f"Segmenting product '{product_name}' from frame: {best_frame_path}")
     
-    segmented_image_bytes = gemini.segment_product(best_frame_path, product_name)
-    logger.info(f"Gemini segmentation successful, received {len(segmented_image_bytes)} bytes")
-    
-    # Save segmented image
     segmented_path = job_paths.segmented_image_path
     segmented_path.parent.mkdir(parents=True, exist_ok=True)
-    with segmented_path.open("wb") as file:
-      file.write(segmented_image_bytes)
     
-    logger.info(f"Segmented image saved to: {segmented_path}")
-    return {"segmented_image_path": str(segmented_path)}
+    # Try Gemini segmentation first (only once, then fallback to rembg)
+    try:
+      segmented_image_bytes = gemini.segment_product(best_frame_path, product_name, max_retries=1)
+      logger.info(f"Gemini segmentation successful, received {len(segmented_image_bytes)} bytes")
+      
+      # Save segmented image
+      with segmented_path.open("wb") as file:
+        file.write(segmented_image_bytes)
+      
+      logger.info(f"Segmented image saved to: {segmented_path}")
+      return {"segmented_image_path": str(segmented_path)}
+    
+    except (GeminiServiceError, Exception) as gemini_error:
+      # Fallback to rembg if Gemini fails
+      logger.warning(f"Gemini segmentation failed: {gemini_error}, falling back to rembg")
+      
+      try:
+        rembg_segment_product(best_frame_path, segmented_path)
+        logger.info(f"rembg segmentation successful, saved to: {segmented_path}")
+        return {"segmented_image_path": str(segmented_path)}
+      
+      except SegmentationError as rembg_error:
+        # Both methods failed
+        error_msg = (
+          f"Both Gemini and rembg segmentation failed. "
+          f"Gemini error: {gemini_error}, rembg error: {rembg_error}"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg) from rembg_error
 
   return node
 
 
 def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
-  """Generate 2-3 enhanced product shots using different styles."""
+  """Generate 2 enhanced product shots using different styles."""
   def node(state: WorkflowState) -> dict:
     import logging
     logger = logging.getLogger(__name__)
@@ -170,9 +207,9 @@ def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
     product_name = state.get("product_name", "product")
     logger.info(f"Enhancing product '{product_name}' from segmented image: {segmented_path}")
 
-    # Generate 2-3 enhanced images (studio, lifestyle, creative)
+    # Generate 2 enhanced images (studio and lifestyle - the best shots)
     enhanced_paths: list[str] = []
-    styles: tuple[PromptStyle, ...] = ("studio", "lifestyle", "creative")
+    styles: tuple[PromptStyle, ...] = ("studio", "lifestyle")
     
     for style in styles:
       try:
@@ -206,7 +243,7 @@ def _make_enhancement_node(gemini: GeminiService, job_paths: JobPaths):
         continue
 
     logger.info(f"Enhancement complete. Generated {len(enhanced_paths)} shots: {enhanced_paths}")
-    # Return enhanced shots (should have at least 2-3)
+    # Return enhanced shots (should have 2: studio and lifestyle)
     return {"enhanced_shots": enhanced_paths}
 
   return node

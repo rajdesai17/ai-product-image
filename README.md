@@ -12,9 +12,9 @@ Create product-only images and enhanced shots from a YouTube URL.
 - ✅ **Top Frames:** Gemini (vision) selects the top 3 frames.
 - ✅ **Product Name:** Gemini identifies the product from those frames.
 - ✅ **Best Frame:** Gemini selects the single best frame index.
-- [ ] **Segmentation:** Gemini removes background from the best frame (Gemini-only; retries on quota).
-- [ ] **Enhancement:** Gemini generates 2–3 styled shots (studio, lifestyle, creative), skipping styles if quota is hit.
-- [ ] **Output:** Backend saves files to `/static/{job_id}/...` and returns URLs in JSON.
+- ✅ **Segmentation:** Gemini removes background from the best frame (Gemini-only; retries on quota).
+- ✅ **Enhancement:** Gemini generates 2–3 styled shots (studio, lifestyle, creative), skipping styles if quota is hit.
+- ✅ **Output:** Backend saves files to `/static/{job_id}/...` and returns URLs in JSON.
 
 ### 2) LangGraph ↔ React communication (API & data flow)
 - Endpoint: `POST /api/process-video`
@@ -40,7 +40,7 @@ Create product-only images and enhanced shots from a YouTube URL.
 ### 2.1) Image Storage & Delivery
 **How segmented images and frames are stored and passed:**
 - **Storage**: All images (frames, segmented, enhanced) are stored on the backend filesystem at `backend/static/{job_id}/`:
-  ```
+  ```text
   backend/static/
     └── {job_id}/
         ├── frames/
@@ -51,7 +51,7 @@ Create product-only images and enhanced shots from a YouTube URL.
             ├── enhanced_studio.png
             └── ...
   ```
-- **Backend Processing**: 
+- **Backend Processing**:
   - Workflow nodes save images directly to disk (e.g., `segmented.png` saved to `backend/static/{job_id}/segmented.png`)
   - File paths are converted to URLs using `to_static_url()` (e.g., `/static/{job_id}/segmented.png`)
   - FastAPI serves static files via `StaticFiles` mounted at `/static` route
@@ -63,12 +63,87 @@ Create product-only images and enhanced shots from a YouTube URL.
 
 **Note**: Images are NOT passed as binary data in the JSON response. They're stored on disk and accessed via HTTP URLs.
 
+### 2.2) Image Enhancement Workflow & API Integration
+
+**Overview:**
+The enhancement step uses Gemini's image generation API (Gemini nano banana / `gemini-2.5-flash-image-preview`) to create 2-3 professional product shots with different backgrounds and styles from the segmented product image.
+
+**API Integration Details:**
+- **Model**: `gemini-2.5-flash-image-preview` (Gemini nano banana)
+- **Pattern**: Image + Text-to-Image editing (as per Gemini API documentation)
+- **Input**: Segmented product image (PNG with transparent background) + style-specific text prompt
+- **Output**: Enhanced product shot with new background/style matching the prompt
+
+**Implementation:**
+- **LangGraph Node**: `enhance_images` node in `backend/app/workflow.py` (lines 161-212)
+- **Service Method**: `GeminiService.generate_enhanced_shot()` in `backend/app/services/gemini.py` (lines 321-396)
+- **Prompts**: Defined in `backend/app/services/enhancement_prompts.py` with 3 distinct styles:
+  - **Studio**: Professional white background, soft even lighting
+  - **Lifestyle**: Modern wooden desk scene, natural window lighting, blurred background
+  - **Creative**: Vibrant gradient background (blue to purple), dramatic side lighting
+
+**API Call Pattern:**
+```python
+# Matches Gemini API documentation pattern for Image + Text-to-Image editing
+parts = [
+  types.Part(
+    inline_data=types.Blob(
+      data=segmented_image_bytes,
+      mime_type="image/png",
+    )
+  ),
+  types.Part(text=style_prompt),
+]
+
+response = client.models.generate_content(
+  model="gemini-2.5-flash-image-preview",
+  contents=types.Content(parts=parts),
+)
+
+# Extract image bytes from response
+image_data = extract_image_bytes(response)
+```
+
+**Error Handling & Retry Logic:**
+- **Retry Strategy**: Up to 3 attempts with exponential backoff on quota errors
+- **Graceful Degradation**: If one style fails (e.g., quota exceeded), the workflow continues with remaining styles
+- **Quota Detection**: Automatically detects 429/quota errors and waits before retrying
+- **Logging**: Comprehensive logging for debugging and monitoring
+
+**Workflow Steps:**
+1. Read segmented product image (PNG) from disk
+2. For each style (studio, lifestyle, creative):
+   - Build style-specific prompt using `build_prompt(style, product_name)`
+   - Call Gemini API with image + prompt
+   - Retry up to 3 times on quota errors
+   - Save generated image to `backend/static/{job_id}/enhanced/enhanced_{style}.png`
+   - Continue to next style even if current one fails
+3. Return list of successfully generated enhanced shot paths
+4. Convert paths to URLs for frontend display
+
+**Prompt Engineering:**
+Each style uses a descriptive prompt that:
+- References the product name for context
+- Describes the desired background and lighting
+- Specifies the mood/atmosphere
+- Preserves product proportions and core design
+
+Example prompt (Studio style):
+```text
+Generate an enhanced marketing image featuring the {product_name}. 
+A professional studio product photograph of the provided product on a clean 
+white background with soft, even lighting. High-resolution, sharp focus. 
+Preserve the product's proportions and core design.
+```
+
 ### 3) Technologies used
-- Backend: FastAPI, LangGraph, Uvicorn
-- Video/Frames: yt-dlp, OpenCV
-- Images: Pillow
-- AI: Google Gemini (vision + image editing); segmentation is Gemini-only
-- Frontend: Next.js (TypeScript), Tailwind CSS, fetch API
+- **Backend**: FastAPI, LangGraph, Uvicorn
+- **Video/Frames**: yt-dlp, OpenCV
+- **Images**: Pillow
+- **AI**:
+  - Google Gemini Vision API (`gemini-2.5-flash`) for product identification and frame selection
+  - Google Gemini Image Generation API (`gemini-2.5-flash-image-preview` / Gemini nano banana) for segmentation and enhancement
+- **Frontend**: Next.js (TypeScript), Tailwind CSS, fetch API
 
 ### 4) How to run / demo (Windows PowerShell)
 - Prerequisites: Python 3.11+, Node.js 18+, Gemini API key
