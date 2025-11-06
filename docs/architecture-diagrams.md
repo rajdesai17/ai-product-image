@@ -137,7 +137,7 @@ sequenceDiagram
     Backend->>rembg: Remove background
     rembg-->>Backend: PNG with transparency
     
-    Note over Backend: Node 5: Enhance Images x3
+    Note over Backend: Node 5: Enhance Images (guarantee 2)
     loop For each style
         Backend->>Gemini: Send segmented.png + prompt
         Gemini-->>Backend: Generated image
@@ -155,7 +155,7 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> ExtractFrames
     
-    ExtractFrames: Node 1: Extract Frames
+    state "Node 1: Extract Frames" as ExtractFrames
     note right of ExtractFrames
         Tools: yt-dlp + OpenCV
         - Download video
@@ -166,7 +166,7 @@ stateDiagram-v2
     
     ExtractFrames --> IdentifyProduct
     
-    IdentifyProduct: Node 2: Identify Product
+    state "Node 2: Identify Product" as IdentifyProduct
     note right of IdentifyProduct
         Tool: Gemini Vision API
         - Send first 10 frames
@@ -176,7 +176,7 @@ stateDiagram-v2
     
     IdentifyProduct --> SelectBestFrame
     
-    SelectBestFrame: Node 3: Select Best Frame
+    state "Node 3: Select Best Frame" as SelectBestFrame
     note right of SelectBestFrame
         Tool: Gemini Vision API (with retries)
         - Send top 3 frames + product_name
@@ -187,7 +187,7 @@ stateDiagram-v2
     
     SelectBestFrame --> SegmentImage
     
-    SegmentImage: Node 4: Segment Image
+    state "Node 4: Segment Image" as SegmentImage
     note right of SegmentImage
         Tool: Gemini Image Edit + rembg fallback
         - Try Gemini background removal once
@@ -198,7 +198,7 @@ stateDiagram-v2
     
     SegmentImage --> EnhanceImages
     
-    EnhanceImages: Node 5: Enhance Images
+    state "Node 5: Enhance Images" as EnhanceImages
     note right of EnhanceImages
         Tool: Gemini Image Gen API + fallback copies
         - Ensure at least 2 enhanced shots
@@ -208,14 +208,14 @@ stateDiagram-v2
     
     EnhanceImages --> ConvertPaths
     
-    ConvertPaths: Convert Paths to URLs
+    state "Convert Paths to URLs" as ConvertPaths
     ConvertPaths --> [*]
     
-    ExtractFrames --> Error: Video download fails
-    IdentifyProduct --> Error: API fails
-    SelectBestFrame --> Error: Invalid index
-    SegmentImage --> Error: Segmentation fails
-    EnhanceImages --> ConvertPaths: Partial success OK
+    ExtractFrames --> Error : Video download fails
+    IdentifyProduct --> Error : API fails
+    SelectBestFrame --> Error : Invalid index
+    SegmentImage --> Error : Segmentation fails
+    EnhanceImages --> ConvertPaths : Partial success OK
     
     Error --> [*]
     
@@ -301,19 +301,19 @@ graph TD
     
     SEGMENTED --> ENH1[Enhanced Studio<br/>enhanced_studio.png]
     SEGMENTED --> ENH2[Enhanced Lifestyle<br/>enhanced_lifestyle.png]
-    SEGMENTED --> ENH3[Enhanced Creative<br/>enhanced_creative.png]
+    %% Creative may be used as backup; guaranteed outputs are two images
     
     BEST --> URL1[/static/job_id/frames/frame_118.jpg]
     SEGMENTED --> URL2[/static/job_id/segmented.png]
     ENH1 --> URL3[/static/job_id/enhanced/enhanced_studio.png]
     ENH2 --> URL4[/static/job_id/enhanced/enhanced_lifestyle.png]
-    ENH3 --> URL5[/static/job_id/enhanced/enhanced_creative.png]
+    %% URL5 omitted because creative is optional/backup
     
     URL1 --> RESPONSE[ProcessVideoResponse<br/>JSON with all URLs]
     URL2 --> RESPONSE
     URL3 --> RESPONSE
     URL4 --> RESPONSE
-    URL5 --> RESPONSE
+    
     
     RESPONSE --> FRONTEND[Frontend Receives JSON]
     FRONTEND --> DISPLAY[Display Images in Gallery]
@@ -338,25 +338,21 @@ graph TD
    - Saves max 15 frames as JPEG: `frame_000.jpg`, `frame_059.jpg`, etc.
 
 3. **Node 2: Identify Product**
-   - First 10 frames sent to **Gemini Vision API**
+   - Top 3 frames sent to **Gemini Vision API**
    - Returns product name (e.g., "iPhone 15 Pro")
 
 4. **Node 3: Select Best Frame**
-   - All frames + product name sent to **Gemini Vision API**
-   - Returns frame index number
-   - Selects best frame file
+   - Top 3 frames + product name sent to **Gemini Vision API**
+   - Retries with backoff; falls back to first frame on failure
 
 5. **Node 4: Segment Image**
-   - **rembg** removes background from best frame
+   - Try Gemini image edit once; fallback to **rembg**
    - Saves as PNG with transparency: `segmented.png`
 
 6. **Node 5: Enhance Images**
-   - **Gemini Image Generation API** called 3 times
-   - Each sends `segmented.png` + style prompt:
-     - **Studio**: White background, professional
-     - **Lifestyle**: Desk scene, natural lighting
-     - **Creative**: Gradient background, dramatic
-   - Saves: `enhanced_studio.png`, `enhanced_lifestyle.png`, `enhanced_creative.png`
+   - **Gemini Image Generation API** prioritizes Studio & Lifestyle (Creative as backup)
+   - Guarantees at least two outputs (uses fallback copies if needed)
+   - Saves: `enhanced_studio.png`, `enhanced_lifestyle.png` (creative optional)
 
 7. **Response** → File paths converted to URLs, JSON response sent to frontend
 
