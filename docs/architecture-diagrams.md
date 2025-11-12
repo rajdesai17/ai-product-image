@@ -287,38 +287,38 @@ graph TD
 
 ```mermaid
 graph TD
-    URL[YouTube URL String]
+   URL[YouTube URL String]
 
-    URL --> JOBID[Job ID UUID]
+   URL --> JOBID[Job ID UUID]
 
-    JOBID --> VIDEO[Video File temp/video.mp4]
-    VIDEO --> FRAMES["Frame Images\nframe_000.jpg\nframe_059.jpg\n...\nframe_413.jpg"]
+   JOBID --> VIDEO[Video File temp/video.mp4]
+   VIDEO --> FRAMES[Frame Images (frame_000.jpg ... frame_413.jpg)]
 
-    FRAMES --> PRODUCT["Product Name\niPhone 15 Pro"]
-    FRAMES --> BEST["Best Frame\nframe_118.jpg"]
+   FRAMES --> PRODUCT[Product Name (e.g., iPhone 15 Pro)]
+   FRAMES --> BEST[Best Frame (frame_118.jpg)]
 
-    BEST --> SEGMENTED["Segmented Image\nsegmented.png\nTransparent Background"]
+   BEST --> SEGMENTED[Segmented Image (transparent PNG)]
 
-    SEGMENTED --> ENH1["Enhanced Studio\nenhanced_studio.png"]
-    SEGMENTED --> ENH2["Enhanced Lifestyle\nenhanced_lifestyle.png"]
+   SEGMENTED --> ENH1[Enhanced Studio Shot]
+   SEGMENTED --> ENH2[Enhanced Lifestyle Shot]
 
-    BEST --> URL1[/static/job_id/frames/frame_118.jpg]
-    SEGMENTED --> URL2[/static/job_id/segmented.png]
-    ENH1 --> URL3[/static/job_id/enhanced/enhanced_studio.png]
-    ENH2 --> URL4[/static/job_id/enhanced/enhanced_lifestyle.png]
+   BEST --> URL1[/static/job_id/frames/frame_118.jpg]
+   SEGMENTED --> URL2[/static/job_id/segmented.png]
+   ENH1 --> URL3[/static/job_id/enhanced/enhanced_studio.png]
+   ENH2 --> URL4[/static/job_id/enhanced/enhanced_lifestyle.png]
 
-    URL1 --> RESPONSE["ProcessVideoResponse\nJSON with all URLs"]
-    URL2 --> RESPONSE
-    URL3 --> RESPONSE
-    URL4 --> RESPONSE
+   URL1 --> RESPONSE[ProcessVideoResponse JSON]
+   URL2 --> RESPONSE
+   URL3 --> RESPONSE
+   URL4 --> RESPONSE
 
-    RESPONSE --> FRONTEND[Frontend Receives JSON]
-    FRONTEND --> DISPLAY[Display Images in Gallery]
+   RESPONSE --> FRONTEND[Frontend Receives JSON]
+   FRONTEND --> DISPLAY[Display Images in Gallery]
 
-    style URL fill:#e1f5ff
-    style PRODUCT fill:#fff4e1
-    style SEGMENTED fill:#ffe1f5
-    style RESPONSE fill:#e1ffe1
+   style URL fill:#e1f5ff
+   style PRODUCT fill:#fff4e1
+   style SEGMENTED fill:#ffe1f5
+   style RESPONSE fill:#e1ffe1
 ```
 
 ---
