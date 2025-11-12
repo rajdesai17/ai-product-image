@@ -56,26 +56,26 @@ This document contains comprehensive Mermaid diagrams illustrating how the AI Pr
 ```mermaid
 graph TB
     subgraph Browser["Client Browser"]
-        UI["Next.js Frontend<br/>React + TypeScript"]
+        UI["Next.js Frontend\nReact + TypeScript"]
     end
-    
+
     subgraph Backend["Backend Server Port 8000"]
         API["FastAPI Server"]
-        WORKFLOW["LangGraph Workflow<br/>5 Nodes"]
-        FS["File System<br/>backend/static/"]
+        WORKFLOW["LangGraph Workflow\n5 Nodes"]
+        FS["File System\nbackend/static/"]
     end
-    
+
     subgraph External["External Services"]
         YT["YouTube"]
-        GEMINI["Google Gemini API<br/>gemini-2.5-flash"]
+        GEMINI["Google Gemini API\ngemini-2.5-flash"]
     end
-    
+
     subgraph Processing["Processing Services"]
-        VIDEO["Video Service<br/>yt-dlp + OpenCV"]
-        SEG["Segmentation<br/>rembg"]
+        VIDEO["Video Service\nyt-dlp + OpenCV"]
+        SEG["Segmentation\nrembg"]
         AI["Gemini Service"]
     end
-    
+
     UI -->|POST /api/process-video| API
     API -->|Generate Job ID| WORKFLOW
     WORKFLOW -->|Download Video| VIDEO
@@ -91,7 +91,7 @@ graph TB
     AI -->|Save Images| FS
     API -->|Return JSON Response| UI
     UI -->|GET /static/...| FS
-    
+
     style UI fill:#e1f5ff
     style API fill:#fff4e1
     style WORKFLOW fill:#ffe1f5
@@ -157,53 +157,53 @@ stateDiagram-v2
     
     state "Node 1: Extract Frames" as ExtractFrames
     note right of ExtractFrames
-        Tools: yt-dlp + OpenCV
-        - Download video
-        - Sample 1 frame every 2s
-        - Save max 15 frames
-        Output: sampled_frames[]
+    Tools: yt-dlp + OpenCV
+    - Download video
+    - Sample 1 frame every 2s
+    - Save max 15 frames
+    Output: sampled_frames[]
     end note
     
     ExtractFrames --> IdentifyProduct
     
     state "Node 2: Identify Product" as IdentifyProduct
     note right of IdentifyProduct
-        Tool: Gemini Vision API
-        - Send first 10 frames
-        - Prompt: Identify product
-        Output: product_name
+    Tool: Gemini Vision API
+    - Send first 10 frames
+    - Prompt: Identify product
+    Output: product_name
     end note
     
     IdentifyProduct --> SelectBestFrame
     
     state "Node 3: Select Best Frame" as SelectBestFrame
     note right of SelectBestFrame
-        Tool: Gemini Vision API (with retries)
-        - Send top 3 frames + product_name
-        - Prompt: Select best frame index
-        - Fallback: use first frame if Gemini fails or index is invalid
-        Output: best_frame_path
+    Tool: Gemini Vision API (with retries)
+    - Send top 3 frames + product_name
+    - Prompt: Select best frame index
+    - Fallback: use first frame if Gemini fails or index is invalid
+    Output: best_frame_path
     end note
     
     SelectBestFrame --> SegmentImage
     
     state "Node 4: Segment Image" as SegmentImage
     note right of SegmentImage
-        Tool: Gemini Image Edit + rembg fallback
-        - Try Gemini background removal once
-        - Fallback to rembg on error/quota
-        - Save PNG with transparency
-        Output: segmented_image_path
+    Tool: Gemini Image Edit + rembg fallback
+    - Try Gemini background removal once
+    - Fallback to rembg on error/quota
+    - Save PNG with transparency
+    Output: segmented_image_path
     end note
     
     SegmentImage --> EnhanceImages
     
     state "Node 5: Enhance Images" as EnhanceImages
     note right of EnhanceImages
-        Tool: Gemini Image Gen API + fallback copies
-        - Ensure at least 2 enhanced shots
-        - Prioritize Studio & Lifestyle; Creative as backup
-        Output: enhanced_shots[]
+    Tool: Gemini Image Gen API + fallback copies
+    - Ensure at least 2 enhanced shots
+    - Prioritize Studio & Lifestyle; Creative as backup
+    Output: enhanced_shots[]
     end note
     
     EnhanceImages --> ConvertPaths
@@ -249,31 +249,31 @@ Our workflow has **5 nodes**:
 ```mermaid
 graph TD
     START[YouTube URL]
-    
+
     START --> NORMALIZE{Is Shorts URL?}
     NORMALIZE -->|Yes| CONVERT[Convert to /watch?v=]
     NORMALIZE -->|No| YTDLP[yt-dlp Download]
     CONVERT --> YTDLP
-    
+
     YTDLP --> CHECK{Duration > 300s?}
     CHECK -->|Yes| ERROR1[Error: Video too long]
     CHECK -->|No| OPENCV[OpenCV Open Video]
-    
+
     OPENCV --> FPS[Get FPS default 30]
     FPS --> CALC[Calculate Interval fps * 2s]
     CALC --> LOOP[Loop Through Frames]
-    
+
     LOOP --> EXTRACT{Frame Index % Interval == 0?}
     EXTRACT -->|No| NEXT[Next Frame]
     EXTRACT -->|Yes| SAVE[Save Frame as JPEG]
-    
+
     SAVE --> COUNT{Saved < 15 frames?}
     COUNT -->|Yes| NEXT
     COUNT -->|No| DONE[Done: Return Frame Paths]
     NEXT --> LOOP
-    
-    DONE --> FRAMES[15 Frame Images<br/>frame_000.jpg to frame_413.jpg]
-    
+
+    DONE --> FRAMES["15 Frame Images\nframe_000.jpg to frame_413.jpg"]
+
     style START fill:#e1f5ff
     style YTDLP fill:#fff4e1
     style OPENCV fill:#ffe1f5
@@ -288,36 +288,33 @@ graph TD
 ```mermaid
 graph TD
     URL[YouTube URL String]
-    
+
     URL --> JOBID[Job ID UUID]
-    
+
     JOBID --> VIDEO[Video File temp/video.mp4]
-    VIDEO --> FRAMES[Frame Images<br/>frame_000.jpg<br/>frame_059.jpg<br/>...<br/>frame_413.jpg]
-    
-    FRAMES --> PRODUCT[Product Name<br/>iPhone 15 Pro]
-    FRAMES --> BEST[Best Frame<br/>frame_118.jpg]
-    
-    BEST --> SEGMENTED[Segmented Image<br/>segmented.png<br/>Transparent Background]
-    
-    SEGMENTED --> ENH1[Enhanced Studio<br/>enhanced_studio.png]
-    SEGMENTED --> ENH2[Enhanced Lifestyle<br/>enhanced_lifestyle.png]
-    %% Creative may be used as backup; guaranteed outputs are two images
-    
+    VIDEO --> FRAMES["Frame Images\nframe_000.jpg\nframe_059.jpg\n...\nframe_413.jpg"]
+
+    FRAMES --> PRODUCT["Product Name\niPhone 15 Pro"]
+    FRAMES --> BEST["Best Frame\nframe_118.jpg"]
+
+    BEST --> SEGMENTED["Segmented Image\nsegmented.png\nTransparent Background"]
+
+    SEGMENTED --> ENH1["Enhanced Studio\nenhanced_studio.png"]
+    SEGMENTED --> ENH2["Enhanced Lifestyle\nenhanced_lifestyle.png"]
+
     BEST --> URL1[/static/job_id/frames/frame_118.jpg]
     SEGMENTED --> URL2[/static/job_id/segmented.png]
     ENH1 --> URL3[/static/job_id/enhanced/enhanced_studio.png]
     ENH2 --> URL4[/static/job_id/enhanced/enhanced_lifestyle.png]
-    %% URL5 omitted because creative is optional/backup
-    
-    URL1 --> RESPONSE[ProcessVideoResponse<br/>JSON with all URLs]
+
+    URL1 --> RESPONSE["ProcessVideoResponse\nJSON with all URLs"]
     URL2 --> RESPONSE
     URL3 --> RESPONSE
     URL4 --> RESPONSE
-    
-    
+
     RESPONSE --> FRONTEND[Frontend Receives JSON]
     FRONTEND --> DISPLAY[Display Images in Gallery]
-    
+
     style URL fill:#e1f5ff
     style PRODUCT fill:#fff4e1
     style SEGMENTED fill:#ffe1f5
