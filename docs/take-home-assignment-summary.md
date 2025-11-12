@@ -12,20 +12,20 @@
 ```mermaid
 sequenceDiagram
    participant User
-   participant NextJS as Next.js Frontend
+   participant Frontend as Next.js Frontend
    participant API as FastAPI Backend
    participant Graph as LangGraph Workflow
    participant Gemini
    participant Storage as Static Asset Store
 
-   User->>NextJS: Submit YouTube URL
-   NextJS->>API: POST /api/process-video
+   User->>Frontend: Submit YouTube URL
+   Frontend->>API: POST /api/process-video
    API->>Graph: Invoke workflow(job_id)
    Graph->>Gemini: Frame scoring, product ID, segmentation, enhancement
    Graph->>Storage: Persist frames, cutouts, renders
    Graph-->>API: Workflow state with asset paths
-   API-->>NextJS: JSON ProcessVideoResponse
-   NextJS-->>User: Render key frame, segmented image, enhanced shots
+   API-->>Frontend: JSON ProcessVideoResponse
+   Frontend-->>User: Render key frame, segmented image, enhanced shots
 ```
 
 ## 2. LangGraph Workflow (Backend)
@@ -42,20 +42,12 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-   Start([Start]) --> Extract[extract_frames
-   download_and_sample_frames]
-   Extract --> TopFrames[select_top_frames
-   Gemini.select_top_frames]
-   TopFrames --> Identify[identify_product
-   Gemini.identify_product]
-   Identify --> BestFrame[select_best_frame
-   Gemini.select_best_frame]
-   BestFrame --> Segment[segment_image
-   Gemini.segment_product
-   rembg fallback]
-   Segment --> Enhance[enhance_images
-   Gemini.generate_enhanced_shot
-   fallback duplicates]
+   Start([Start]) --> Extract["extract_frames<br/>download_and_sample_frames"]
+   Extract --> TopFrames["select_top_frames<br/>Gemini.select_top_frames"]
+   TopFrames --> Identify["identify_product<br/>Gemini.identify_product"]
+   Identify --> BestFrame["select_best_frame<br/>Gemini.select_best_frame"]
+   BestFrame --> Segment["segment_image<br/>Gemini.segment_product<br/>rembg fallback"]
+   Segment --> Enhance["enhance_images<br/>Gemini.generate_enhanced_shot<br/>fallback duplicates"]
    Enhance --> End([State with URLs])
 ```
 
